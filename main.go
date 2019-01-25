@@ -1,23 +1,39 @@
 package main
 
 import (
-	"flag"
-	"fmt"
+	"github.com/jessevdk/go-flags"
 	"log"
-	"net/http"
+	"os"
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "EHLO MY WORLD! %s", r.URL.Path[1:])
-}
+var revision = "unknown"
+var buildstamp = "unknown"
 
 func main() {
-	port := flag.String("port", ":10000", "-port=:10000")
-	flag.Parse()
+	log.Printf("app %s\nbuild date: %s\n", revision, buildstamp)
 
-	http.HandleFunc("/", handler)
+	server := NewServer()
+	defer server.Shutdown()
 
-	fmt.Printf("started server on port %s", *port)
+	parser := flags.NewParser(server, flags.Default)
+	parser.ShortDescription = "Unknown app"
 
-	log.Fatal(http.ListenAndServe(*port, nil))
+	if _, err := parser.Parse(); err != nil {
+		code := 1
+		if fe, ok := err.(*flags.Error); ok {
+			if fe.Type == flags.ErrHelp {
+				code = 0
+			}
+		}
+		os.Exit(code)
+	}
+
+	appRoot, _ := os.Getwd()
+
+	server.ConfigureLogger()
+	server.ConfigureAPI(revision, appRoot)
+
+	if err := server.Serve(); err != nil {
+		log.Fatalln(err)
+	}
 }
